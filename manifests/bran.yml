@@ -142,8 +142,10 @@ instance_groups:
   - name: performance_tests
     release: routing-perf
     properties:
-      client_certificate: ((application_ca.certificate))
-      client_private_key: ((application_ca.private_key))
+      envoy_certificate: ((gorouter_backend_tls.certificate))
+      envoy_private_key: ((gorouter_backend_tls.private_key))
+      client_certificate: ((router_ssl.certificate))
+      client_private_key: ((router_ssl.private_key))
       performance_tests:
         tag: gorouter
         host: gostatic-0.foo.com
@@ -171,3 +173,16 @@ variables:
   options:
     common_name: appRootCA
     is_ca: true
+# - name: router_ssl
+#   options:
+#     alternative_names:
+#     - oliviabensonfromsvu.capi.land
+#     - '*.oliviabensonfromsvu.capi.land'
+#     ca: router_ca
+#     common_name: routerSSL
+#   type: certificate
+# - name: router_ca
+#   options:
+#     common_name: routerCA
+#     is_ca: true
+#   type: certificate

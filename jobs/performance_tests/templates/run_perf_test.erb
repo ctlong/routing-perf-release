@@ -5,7 +5,7 @@ set -e
 LOG_DIR=/var/vcap/sys/log/performance_tests
 GOSTATIC_BACKEND_HOST=<%= link("static").instances[0].address %>
 GOROUTER_PROXY_URI=<%= p("performance_tests.protocol") %>://${1}:<%= p("performance_tests.port") %>
-GOROUTER_HTTPS_PROXY_URI=https://${1}
+GOROUTER_HTTPS_PROXY_URI=https://10.0.1.8:443
 
 RPS_LOWER_LIMIT=<%= p("performance_tests.throughput_lower_limit") %>
 LATENCY_UPPER_LIMIT_90=<%= p("performance_tests.latency_upper_limit_90") %>
@@ -35,8 +35,10 @@ run_perf_tests() {
     -n $TOTAL_REQUESTS \
     -c $TOTAL_CONCURRENT \
     -t 0 \
-    -host "<%=p("performance_tests.host") %>" \
-    ${GOROUTER_PROXY_URI} | tee ${LOG_DIR}/routed_loadtest_${date}.log
+    -cert /var/vcap/jobs/performance_tests/config/certs/client.crt \
+    -key /var/vcap/jobs/performance_tests/config/certs/client.key \
+    -host "h1.oliviabensonfromsvu.capi.land" \
+    ${GOROUTER_HTTPS_PROXY_URI} | tee ${LOG_DIR}/routed_loadtest_${date}.log
   echo ""
 
   # run load test against gorouter using http2
@@ -46,27 +48,50 @@ run_perf_tests() {
     -c $TOTAL_CONCURRENT \
     -t 0 \
     -h2 \
-    -host "<%=p("performance_tests.host") %>" \
+    -cert /var/vcap/jobs/performance_tests/config/certs/client.crt \
+    -key /var/vcap/jobs/performance_tests/config/certs/client.key \
+    -host "h2.oliviabensonfromsvu.capi.land" \
     ${GOROUTER_HTTPS_PROXY_URI} | tee ${LOG_DIR}/routed_loadtest_${date}.log
   echo ""
 
-  # run load test aginst gostatic envoy
-  echo "Starting gostatic envoy test of ${TOTAL_REQUESTS} requests, ${TOTAL_CONCURRENT} concurrent..."
+  # run load test aginst h1 envoy using http1
+  echo "Starting h1 envoy test of ${TOTAL_REQUESTS} requests, ${TOTAL_CONCURRENT} concurrent..."
   exec /var/vcap/packages/hey/bin/hey \
     -n $TOTAL_REQUESTS \
     -c $TOTAL_CONCURRENT \
     -t 0 \
-    -cert /var/vcap/jobs/performance_tests/config/certs/client.crt \
-    -key /var/vcap/jobs/performance_tests/config/certs/client.key \
-    https://${GOSTATIC_BACKEND_HOST}:61001 | tee ${LOG_DIR}/routed_loadtest_${date}.log
+    -cert /var/vcap/jobs/performance_tests/config/certs/envoy.crt \
+    -key /var/vcap/jobs/performance_tests/config/certs/envoy.key \
+    https://10.0.1.13:61002 | tee ${LOG_DIR}/routed_loadtest_${date}.log
     echo ""
 
-  echo "Starting gostatic direct load test of ${TOTAL_REQUESTS} requests, ${TOTAL_CONCURRENT} concurrent..."
+  # run load test aginst h2 envoy using http2
+  echo "Starting h2 envoy test of ${TOTAL_REQUESTS} requests, ${TOTAL_CONCURRENT} concurrent..."
   exec /var/vcap/packages/hey/bin/hey \
     -n $TOTAL_REQUESTS \
     -c $TOTAL_CONCURRENT \
     -t 0 \
-    http://${GOSTATIC_BACKEND_HOST}:8080 | tee ${LOG_DIR}/direct_loadtest_${date}.log
+    -cert /var/vcap/jobs/performance_tests/config/certs/envoy.crt \
+    -key /var/vcap/jobs/performance_tests/config/certs/envoy.key \
+    -h2 \
+    https://10.0.1.14:61002 | tee ${LOG_DIR}/routed_loadtest_${date}.log
+    echo ""
+
+  echo "Starting h1 direct load test of ${TOTAL_REQUESTS} requests, ${TOTAL_CONCURRENT} concurrent..."
+  exec /var/vcap/packages/hey/bin/hey \
+    -n $TOTAL_REQUESTS \
+    -c $TOTAL_CONCURRENT \
+    -t 0 \
+    http://10.0.1.13:61000 | tee ${LOG_DIR}/direct_loadtest_${date}.log
+  echo ""
+
+  echo "Starting h2 direct load test of ${TOTAL_REQUESTS} requests, ${TOTAL_CONCURRENT} concurrent..."
+  exec /var/vcap/packages/hey/bin/hey \
+    -n $TOTAL_REQUESTS \
+    -c $TOTAL_CONCURRENT \
+    -t 0 \
+    -h2 \
+    http://10.0.1.14:61000 | tee ${LOG_DIR}/direct_loadtest_${date}.log
   echo ""
 
   # requests / sec
@@ -100,8 +125,6 @@ main() {
     echo "Performance tests generated HTTP error from router"
     exit 1
   fi
-
-  emit_datadog_metrics ${RPS} ${LATENCY_90} ${LATENCY_95} ${LATENCY_99}
 
   RPSINT=`echo ${RPS} | cut -f 1 -d "."`
 

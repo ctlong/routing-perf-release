@@ -4,6 +4,8 @@ name: performance_tests
 templates:
   run.erb: bin/run
   run_perf_test.erb: bin/run_perf_test
+  envoy.crt.erb: config/certs/envoy.crt
+  envoy.key.erb: config/certs/envoy.key
   client.crt.erb: config/certs/client.crt
   client.key.erb: config/certs/client.key
 
@@ -23,6 +25,10 @@ consumes:
   type: backend
 
 properties:
+  envoy_certificate:
+    description: Certificate to use for mutual TLS with envoy
+  envoy_private_key:
+    description: Private key to use for mutual TLS with envoy
   client_certificate:
     description: Certificate to use for mutual TLS with envoy
   client_private_key:
